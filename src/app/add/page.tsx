@@ -67,6 +67,7 @@ function SortableItem({ id, name }: { id: string; name: string }) {
 export default function AddPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   
   // Dnd 状态预留
   const [tags, setTags] = useState([
@@ -91,6 +92,7 @@ export default function AddPage() {
   );
 
   useEffect(() => {
+    setIsMounted(true);
     const ctx = gsap.context(() => {
       gsap.from(".animate-item", {
         y: 20,
@@ -231,20 +233,23 @@ export default function AddPage() {
             </div>
             
             <div className="flex-1">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={tags}
-                  strategy={verticalListSortingStrategy}
+              {isMounted ? (
+                <DndContext
+                  id="dnd-context"
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
                 >
-                  {tags.map((tag) => (
-                    <SortableItem key={tag.id} id={tag.id} name={tag.name} />
-                  ))}
-                </SortableContext>
-              </DndContext>
+                  <SortableContext
+                    items={tags}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {tags.map((tag) => (
+                      <SortableItem key={tag.id} id={tag.id} name={tag.name} />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              ) : null}
             </div>
           </div>
         </div>

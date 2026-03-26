@@ -40,10 +40,10 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
     const startRad = (startAngle - 90) * (Math.PI / 180);
     const endRad = (endAngle - 90) * (Math.PI / 180);
 
-    const x1 = cx + radius * Math.cos(startRad);
-    const y1 = cy + radius * Math.sin(startRad);
-    const x2 = cx + radius * Math.cos(endRad);
-    const y2 = cy + radius * Math.sin(endRad);
+    const x1 = (cx + radius * Math.cos(startRad)).toFixed(4);
+    const y1 = (cy + radius * Math.sin(startRad)).toFixed(4);
+    const x2 = (cx + radius * Math.cos(endRad)).toFixed(4);
+    const y2 = (cy + radius * Math.sin(endRad)).toFixed(4);
 
     const largeArcFlag = angle > 180 ? 1 : 0;
 
@@ -56,17 +56,19 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
     ].join(" ");
 
     // Text rotation logic
-    const midAngle = startAngle + angle / 2;
+    const midAngleNum = startAngle + angle / 2;
+    const midAngle = midAngleNum.toFixed(4);
     // position text slightly inside
     const textRadius = radius * 0.65;
-    const textRad = (midAngle - 90) * (Math.PI / 180);
-    const tx = cx + textRadius * Math.cos(textRad);
-    const ty = cy + textRadius * Math.sin(textRad);
+    const textRad = (midAngleNum - 90) * (Math.PI / 180);
+    const tx = (cx + textRadius * Math.cos(textRad)).toFixed(4);
+    const ty = (cy + textRadius * Math.sin(textRad)).toFixed(4);
 
     return {
       ...item,
       pathData,
       midAngle,
+      midAngleNum,
       tx,
       ty,
     };
@@ -94,7 +96,7 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
     // 目标扇区的中心角度 (我们要让这个角度对准指针，假设指针在上方也就是 270度 / -90度 位置)
     // SVG的初始状态，顶部是 -90度，对应我们要转到的角度是 360 - midAngle
     const baseRotation = 360 * 5; // 转5圈
-    const targetRotation = baseRotation + (360 - winner.midAngle); 
+    const targetRotation = baseRotation + (360 - winner.midAngleNum); 
 
     // GSAP Animation
     gsap.to(wheelRef.current, {
