@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import gsap from "gsap";
 import { useAppStore } from "@/store/useAppStore";
-import { saveRouletteAction } from "@/app/actions/roulette";
+import { nanoid } from "nanoid";
 
 type RouletteItem = {
   id: string;
@@ -87,27 +87,31 @@ export default function EditRoulettePage({ params }: { params: Promise<{ id: str
     }));
   };
 
-  const handleSave = async () => {
+  const { setRoulettes, updateRoulette } = useAppStore();
+  const handleSave = () => {
     if (isError) return alert("总固定概率不能超过 100%!");
     if (items.some(i => !i.name.trim())) return alert("选项名称不能为空!");
     if (items.length < 2) return alert("至少需要两个选项");
-    
     setIsSaving(true);
     gsap.to(".save-icon", { scale: 1.2, duration: 0.1, yoyo: true, repeat: 1 });
-    
-    try {
-      const finalType = type === "CUSTOM" ? customType : type;
-      await saveRouletteAction(resolvedParams.id, {
-        name,
-        type: finalType,
-        isDefault,
-        items: items.map(i => ({ name: i.name, fixedProbability: i.fixedProbability }))
-      });
-      router.push("/manage");
-    } catch (e: any) {
-      alert(e.message || "保存失败");
-      setIsSaving(false);
+    const finalType = type === "CUSTOM" ? customType : type;
+    const rouletteData = {
+      id: resolvedParams.id === "new" ? nanoid() : resolvedParams.id,
+      name,
+      type: finalType,
+      isDefault,
+      items: items.map(i => ({
+        id: i.id || nanoid(),
+        name: i.name,
+        fixedProbability: i.fixedProbability
+      }))
+    };
+    if (resolvedParams.id === "new") {
+      setRoulettes([...roulettes, rouletteData]);
+    } else {
+      updateRoulette(resolvedParams.id, rouletteData);
     }
+    router.push("/manage");
   };
 
   return (

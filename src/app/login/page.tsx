@@ -4,9 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, CheckCircle } from "lucide-react";
 import gsap from "gsap";
-import { loginAction, registerAction } from "@/app/actions/auth";
+import { useAppStore } from "@/store/useAppStore";
+import { useRouter } from "next/navigation";
+import { db } from "@/lib/db";
 
 // 表单验证 Schema
 const authSchema = z.object({
@@ -21,6 +23,9 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const router = useRouter();
+  const { login } = useAppStore();
 
   // 动画 Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,6 +40,11 @@ export default function AuthPage() {
   } = useForm<AuthFormValues>({
     resolver: zodResolver(authSchema),
   });
+
+  // 初始化 IndexedDB
+  useEffect(() => {
+    db.init().catch(console.error);
+  }, []);
 
   // 进场动画
   useEffect(() => {
@@ -69,6 +79,7 @@ export default function AuthPage() {
       onComplete: () => {
         setIsLogin(!isLogin);
         setError(null);
+        setSuccessMessage(null);
         reset();
         gsap.to(formRef.current, {
           opacity: 1,
@@ -76,9 +87,10 @@ export default function AuthPage() {
           duration: 0.4,
           ease: "power2.out",
         });
-        
+
         // 标题动画
-        gsap.fromTo(titleRef.current, 
+        gsap.fromTo(
+          titleRef.current,
           { opacity: 0, y: -10 },
           { opacity: 1, y: 0, duration: 0.4 }
         );
@@ -89,27 +101,52 @@ export default function AuthPage() {
   const onSubmit = async (data: AuthFormValues) => {
     setIsLoading(true);
     setError(null);
-    
+    setSuccessMessage(null);
+
     // 按钮点击动画反馈
-    gsap.to(".submit-btn", { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1 });
+    gsap.to(".submit-btn", {
+      scale: 0.95,
+      duration: 0.1,
+      yoyo: true,
+      repeat: 1,
+    });
 
     try {
-      // 创建 FormData 对象
-      const formData = new FormData();
-      formData.append("username", data.username);
-      formData.append("password", data.password);
+      if (isLogin) {
+        // 登录逻辑：从 IndexedDB 验证用户
+        const user = await db.validateUser(data.username, data.password);
 
-      // 调用相应的 Server Action
-      const result = isLogin 
-        ? await loginAction(formData)
-        : await registerAction(formData);
+        if (!user) {
+          setError("用户名或密码不正确");
+          setIsLoading(false);
+          return;
+        }
 
-      // 如果返回了错误信息（而不是直接重定向）
-      if (result?.error) {
-        setError(result.error);
+        // 登录成功，放行
+        login(data.username);
         setIsLoading(false);
+        router.push("/home");
+      } else {
+        // 注册逻辑：创建新用户到 IndexedDB
+        try {
+          await db.createUser(data.username, data.password);
+          // 注册成功，显示成功消息，跳转到登录页
+          setSuccessMessage("注册成功，请登录");
+          setIsLoading(false);
+          
+          // 延迟后切换到登录模式
+          setTimeout(() => {
+            toggleMode();
+          }, 1500);
+        } catch (err) {
+          if (err instanceof Error && err.message === "用户名已存在") {
+            setError("该用户名已被注册");
+          } else {
+            setError("注册失败，请重试");
+          }
+          setIsLoading(false);
+        }
       }
-      // 如果没有错误，redirect() 会直接跳转，这里代码不会执行
     } catch (err) {
       setError(err instanceof Error ? err.message : "发生错误");
       setIsLoading(false);
@@ -119,13 +156,13 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white px-6 py-12 sm:px-8">
       {/* 极简高级质感：大量留白，细边框 */}
-      <div 
+      <div
         ref={containerRef}
         className="w-full max-w-sm space-y-10 p-8 sm:p-12 border border-gray-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-none sm:rounded-2xl"
       >
         {/* Header */}
         <div className="space-y-3">
-          <h2 
+          <h2
             ref={titleRef}
             className="text-3xl font-light tracking-widest text-gray-900"
           >
@@ -135,10 +172,20 @@ export default function AuthPage() {
         </div>
 
         {/* Form */}
-        <form ref={formRef} className="space-y-8" onSubmit={handleSubmit(onSubmit)}>
+        <form
+          ref={formRef}
+          className="space-y-8"
+          onSubmit={handleSubmit(onSubmit)}
+        >
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-600">
               {error}
+            </div>
+          )}
+          {successMessage && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded text-sm text-green-600 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" />
+              {successMessage}
             </div>
           )}
           <div className="space-y-6">
