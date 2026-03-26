@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import gsap from "gsap";
 
 export type RouletteItemType = {
@@ -14,9 +14,11 @@ interface GSAPRouletteProps {
   items: RouletteItemType[];
 }
 
-export default function GSAPRoulette({ items }: GSAPRouletteProps) {
+const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
   const wheelRef = useRef<SVGSVGElement>(null);
   const pointerRef = useRef<HTMLDivElement>(null);
+  const resultTextRef = useRef<HTMLParagraphElement>(null);
+  const centerDotRef = useRef<HTMLDivElement>(null);
   const [isSpinning, setIsSpinning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
@@ -58,19 +60,28 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
     // Text rotation logic
     const midAngleNum = startAngle + angle / 2;
     const midAngle = midAngleNum.toFixed(4);
-    // position text slightly inside
-    const textRadius = radius * 0.65;
-    const textRad = (midAngleNum - 90) * (Math.PI / 180);
-    const tx = (cx + textRadius * Math.cos(textRad)).toFixed(4);
-    const ty = (cy + textRadius * Math.sin(textRad)).toFixed(4);
+    
+    // position name text slightly inside
+    const nameRadius = radius * 0.70;
+    const nameRad = (midAngleNum - 90) * (Math.PI / 180);
+    const ntx = (cx + nameRadius * Math.cos(nameRad)).toFixed(4);
+    const nty = (cy + nameRadius * Math.sin(nameRad)).toFixed(4);
+
+    // position probability text closer to center
+    const probRadius = radius * 0.50;
+    const probRad = (midAngleNum - 90) * (Math.PI / 180);
+    const ptx = (cx + probRadius * Math.cos(probRad)).toFixed(4);
+    const pty = (cy + probRadius * Math.sin(probRad)).toFixed(4);
 
     return {
       ...item,
       pathData,
       midAngle,
       midAngleNum,
-      tx,
-      ty,
+      ntx,
+      nty,
+      ptx,
+      pty,
     };
   });
 
@@ -78,6 +89,12 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
     if (isSpinning) return;
     setIsSpinning(true);
     setResult(null);
+
+    // Ripple click effect
+    gsap.fromTo(centerDotRef.current, 
+      { scale: 0.8, boxShadow: "0 0 0 0 rgba(0,0,0,0.4)" },
+      { scale: 1, boxShadow: "0 0 0 20px rgba(0,0,0,0)", duration: 0.6, ease: "power2.out" }
+    );
 
     // 抽奖逻辑：根据概率计算落在哪个扇区
     const random = Math.random() * 100;
@@ -113,6 +130,17 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
           { scale: 0.8 },
           { scale: 1, duration: 0.3, ease: "back.out(1.7)" }
         );
+
+        // Result staggered reveal
+        setTimeout(() => {
+          if (resultTextRef.current) {
+            const chars = resultTextRef.current.querySelectorAll('.char');
+            gsap.fromTo(chars, 
+              { opacity: 0, y: 10, scale: 0.8 },
+              { opacity: 1, y: 0, scale: 1, stagger: 0.1, duration: 0.4, ease: "back.out(2)" }
+            );
+          }
+        }, 50);
       }
     });
   };
@@ -141,18 +169,33 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
               <g key={sector.id}>
                 <path d={sector.pathData} fill={sector.color} stroke="#ffffff" strokeWidth="2" />
                 <text
-                  x={sector.tx}
-                  y={sector.ty}
+                  x={sector.ntx}
+                  y={sector.nty}
                   fill="#ffffff"
                   fontSize="14"
                   fontWeight="300"
                   textAnchor="middle"
                   alignmentBaseline="middle"
                   dominantBaseline="middle"
-                  transform={`rotate(${sector.midAngle}, ${sector.tx}, ${sector.ty})`}
+                  transform={`rotate(${sector.midAngle}, ${sector.ntx}, ${sector.nty})`}
                   style={{ userSelect: "none" }}
                 >
                   {sector.name}
+                </text>
+                <text
+                  x={sector.ptx}
+                  y={sector.pty}
+                  fill="#ffffff"
+                  fontSize="10"
+                  fontWeight="300"
+                  opacity="0.8"
+                  textAnchor="middle"
+                  alignmentBaseline="middle"
+                  dominantBaseline="middle"
+                  transform={`rotate(${sector.midAngle}, ${sector.ptx}, ${sector.pty})`}
+                  style={{ userSelect: "none" }}
+                >
+                  {sector.probability.toFixed(0)}%
                 </text>
               </g>
             ))}
@@ -160,27 +203,40 @@ export default function GSAPRoulette({ items }: GSAPRouletteProps) {
         </svg>
         
         {/* 中心圆点 */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-sm z-10 flex items-center justify-center">
+        <div ref={centerDotRef} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-sm z-10 flex items-center justify-center">
           <div className="w-3 h-3 bg-gray-200 rounded-full"></div>
         </div>
       </div>
 
       <button
-        onClick={spin}
+        onClick={(e) => {
+          gsap.to(e.currentTarget, { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1 });
+          spin();
+        }}
         disabled={isSpinning || items.length === 0}
-        className="w-48 py-4 bg-black text-white rounded-full font-light tracking-widest uppercase transition-all hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-[0_4px_14px_0_rgba(0,0,0,0.2)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.23)] active:scale-95"
+        className="w-48 py-4 bg-black text-white rounded-full font-light tracking-widest uppercase transition-all hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-[0_4px_14px_0_rgba(0,0,0,0.2)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.23)]"
       >
         {isSpinning ? "命运转动中..." : "开始抽取"}
       </button>
 
       {/* 结果显示 */}
-      <div className="h-12 flex items-center justify-center">
+      <div className="h-16 flex items-center justify-center relative">
         {result && (
-          <p className="text-xl font-medium tracking-wide animate-in fade-in slide-in-from-bottom-2 duration-500">
-            今天就吃: <span className="font-bold border-b-2 border-black pb-1 ml-2">{result}</span>
-          </p>
+          <div className="absolute inset-0 flex items-center justify-center">
+            {/* 背后光晕 */}
+            <div className="absolute w-32 h-10 bg-yellow-200 opacity-20 blur-xl rounded-full"></div>
+            <p ref={resultTextRef} className="text-xl font-light tracking-widest z-10 flex items-center">
+              ✨ <span className="mx-2 font-medium flex">
+                {result.split('').map((char, i) => (
+                  <span key={i} className="char inline-block">{char}</span>
+                ))}
+              </span> ✨
+            </p>
+          </div>
         )}
       </div>
     </div>
   );
-}
+});
+
+export default GSAPRoulette;

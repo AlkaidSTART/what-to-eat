@@ -4,6 +4,8 @@ import { useState, useMemo, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
 import gsap from "gsap";
+import { useAppStore } from "@/store/useAppStore";
+import { saveRouletteAction } from "@/app/actions/roulette";
 
 type RouletteItem = {
   id: string;
@@ -14,16 +16,26 @@ type RouletteItem = {
 export default function EditRoulettePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const [name, setName] = useState("美好下午茶");
-  const [type, setType] = useState("AFTERNOON");
-  const [isDefault, setIsDefault] = useState(true);
+  const { roulettes } = useAppStore();
   
-  const [items, setItems] = useState<RouletteItem[]>([
-    { id: "1", name: "奶茶", fixedProbability: 30 },
-    { id: "2", name: "咖啡", fixedProbability: null },
-    { id: "3", name: "小蛋糕", fixedProbability: null },
-    { id: "4", name: "水果捞", fixedProbability: null },
-  ]);
+  const existingRoulette = roulettes.find(r => r.id === resolvedParams.id);
+  
+  const [name, setName] = useState(existingRoulette?.name || "新转盘");
+  const [type, setType] = useState(existingRoulette?.type || "NONE");
+  const [customType, setCustomType] = useState("");
+  const [isDefault, setIsDefault] = useState(existingRoulette?.isDefault ?? false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const [items, setItems] = useState<RouletteItem[]>(
+    existingRoulette?.items.map(i => ({
+      id: i.id,
+      name: i.name,
+      fixedProbability: i.fixedProbability
+    })) || [
+      { id: "1", name: "选项1", fixedProbability: null },
+      { id: "2", name: "选项2", fixedProbability: null },
+    ]
+  );
 
   useEffect(() => {
     gsap.fromTo(".animate-item", 
@@ -75,13 +87,27 @@ export default function EditRoulettePage({ params }: { params: Promise<{ id: str
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (isError) return alert("总固定概率不能超过 100%!");
     if (items.some(i => !i.name.trim())) return alert("选项名称不能为空!");
+    if (items.length < 2) return alert("至少需要两个选项");
     
+    setIsSaving(true);
     gsap.to(".save-icon", { scale: 1.2, duration: 0.1, yoyo: true, repeat: 1 });
-    console.log("Saved", { name, type, isDefault, items: calculatedItems });
-    setTimeout(() => router.push("/manage"), 500);
+    
+    try {
+      const finalType = type === "CUSTOM" ? customType : type;
+      await saveRouletteAction(resolvedParams.id, {
+        name,
+        type: finalType,
+        isDefault,
+        items: items.map(i => ({ name: i.name, fixedProbability: i.fixedProbability }))
+      });
+      router.push("/manage");
+    } catch (e: any) {
+      alert(e.message || "保存失败");
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -96,7 +122,7 @@ export default function EditRoulettePage({ params }: { params: Promise<{ id: str
           <h1 className="text-lg font-medium tracking-widest text-gray-900">
             {resolvedParams.id === "new" ? "新增转盘" : "编辑转盘"}
           </h1>
-          <button onClick={handleSave} className="text-black p-2 -mr-2 hover:bg-gray-100 rounded-full transition-colors">
+          <button onClick={handleSave} disabled={isSaving} className="text-black p-2 -mr-2 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50">
             <Save className="w-5 h-5 save-icon" />
           </button>
         </header>
@@ -116,20 +142,35 @@ export default function EditRoulettePage({ params }: { params: Promise<{ id: str
             </label>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-col sm:flex-row">
             <div className="flex-1 relative group pt-2">
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="block w-full py-3 bg-transparent border-0 border-b border-gray-300 appearance-none focus:outline-none focus:ring-0 focus:border-black peer transition-colors"
-              >
-                <option value="NONE">不指定</option>
-                <option value="BREAKFAST">早餐 (06:00-09:30)</option>
-                <option value="LUNCH">午餐 (11:00-13:30)</option>
-                <option value="AFTERNOON">下午茶 (14:30-17:00)</option>
-                <option value="DINNER">晚餐 (17:30-20:30)</option>
-                <option value="NIGHT">夜宵 (22:00-02:00)</option>
-              </select>
+              <div className="flex gap-2">
+                <select
+                  value={["NONE", "BREAKFAST", "LUNCH", "AFTERNOON", "DINNER", "NIGHT"].includes(type) ? type : "CUSTOM"}
+                  onChange={(e) => {
+                    setType(e.target.value);
+                    if (e.target.value !== "CUSTOM") setCustomType("");
+                  }}
+                  className="block w-full py-3 bg-transparent border-0 border-b border-gray-300 appearance-none focus:outline-none focus:ring-0 focus:border-black transition-colors"
+                >
+                  <option value="NONE">不指定</option>
+                  <option value="BREAKFAST">早餐 (06:00-09:30)</option>
+                  <option value="LUNCH">午餐 (11:00-13:30)</option>
+                  <option value="AFTERNOON">下午茶 (14:30-17:00)</option>
+                  <option value="DINNER">晚餐 (17:30-20:30)</option>
+                  <option value="NIGHT">夜宵 (22:00-02:00)</option>
+                  <option value="CUSTOM">自定义</option>
+                </select>
+                {type === "CUSTOM" && (
+                  <input 
+                    type="text"
+                    value={customType}
+                    onChange={(e) => setCustomType(e.target.value)}
+                    placeholder="输入场景名"
+                    className="block w-full py-3 bg-transparent border-0 border-b border-gray-300 focus:outline-none focus:border-black"
+                  />
+                )}
+              </div>
               <label className="absolute text-gray-400 duration-300 transform -translate-y-6 scale-75 top-5 -z-10 origin-[0]">
                 推荐时段
               </label>

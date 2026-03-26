@@ -24,7 +24,7 @@ model User {
 model Roulette {
   id          String         @id @default(cuid())
   name        String         
-  type        RouletteType   @default(NONE) 
+  type        String         @default("NONE") 
   isDefault   Boolean        @default(false) 
   userId      String
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -42,14 +42,4 @@ model RouletteItem {
   roulette         Roulette @relation(fields: [rouletteId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-}
-
-// 时间段枚举
-enum RouletteType {
-  BREAKFAST  
-  LUNCH      
-  AFTERNOON  
-  DINNER     
-  NIGHT      
-  NONE       
 }
