@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import gsap from "gsap";
+import { loginAction, registerAction } from "@/app/actions/auth";
 
 // 表单验证 Schema
 const authSchema = z.object({
@@ -19,6 +20,7 @@ export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 动画 Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,7 @@ export default function AuthPage() {
       duration: 0.3,
       onComplete: () => {
         setIsLogin(!isLogin);
+        setError(null);
         reset();
         gsap.to(formRef.current, {
           opacity: 1,
@@ -85,15 +88,32 @@ export default function AuthPage() {
 
   const onSubmit = async (data: AuthFormValues) => {
     setIsLoading(true);
-    // 模拟 API 调用
-    console.log(isLogin ? "登录数据:" : "注册数据:", data);
+    setError(null);
     
     // 按钮点击动画反馈
     gsap.to(".submit-btn", { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1 });
 
-    setTimeout(() => {
+    try {
+      // 创建 FormData 对象
+      const formData = new FormData();
+      formData.append("username", data.username);
+      formData.append("password", data.password);
+
+      // 调用相应的 Server Action
+      const result = isLogin 
+        ? await loginAction(formData)
+        : await registerAction(formData);
+
+      // 如果返回了错误信息（而不是直接重定向）
+      if (result?.error) {
+        setError(result.error);
+        setIsLoading(false);
+      }
+      // 如果没有错误，redirect() 会直接跳转，这里代码不会执行
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "发生错误");
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -116,6 +136,11 @@ export default function AuthPage() {
 
         {/* Form */}
         <form ref={formRef} className="space-y-8" onSubmit={handleSubmit(onSubmit)}>
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-600">
+              {error}
+            </div>
+          )}
           <div className="space-y-6">
             {/* Username Input (Material Design: 仅下边划线，极简) */}
             <div className="relative group">

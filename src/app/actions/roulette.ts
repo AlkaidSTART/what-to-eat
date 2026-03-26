@@ -1,6 +1,8 @@
 "use server";
 
-import prisma from "@/lib/prisma";
+import AppDataSource, { initializeDataSource } from "@/lib/database";
+import { Roulette } from "@/entities/Roulette";
+import { RouletteItem } from "@/entities/RouletteItem";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
@@ -13,13 +15,21 @@ export async function getRoulettesAction() {
   const userId = await getUserId();
   if (!userId) throw new Error("Unauthorized");
 
-  const roulettes = await prisma.roulette.findMany({
-    where: { userId },
-    include: { items: true },
-    orderBy: { createdAt: "desc" }
-  });
+  try {
+    await initializeDataSource();
+    const rouletteRepository = AppDataSource.getRepository(Roulette);
+    
+    const roulettes = await rouletteRepository.find({
+      where: { userId },
+      relations: ["items"],
+      order: { createdAt: "DESC" }
+    });
 
-  return roulettes;
+    return roulettes;
+  } catch (error) {
+    console.error("Get roulettes error:", error);
+    throw error;
+  }
 }
 
 export async function saveRouletteAction(
@@ -35,44 +45,58 @@ export async function saveRouletteAction(
     throw new Error("概率总和不能大于100%");
   }
 
-  if (id === "new") {
-    await prisma.roulette.create({
-      data: {
+  try {
+    await initializeDataSource();
+    const rouletteRepository = AppDataSource.getRepository(Roulette);
+    const itemRepository = AppDataSource.getRepository(RouletteItem);
+
+    if (id === "new") {
+      const roulette = rouletteRepository.create({
         name: data.name,
         type: data.type,
         isDefault: data.isDefault,
         userId,
-        items: {
-          create: data.items.map(item => ({
+        items: data.items.map(item => {
+          const routeItem = itemRepository.create({
             name: item.name,
             fixedProbability: item.fixedProbability
-          }))
-        }
-      }
-    });
-  } else {
-    // Update existing: Delete all items and recreate for simplicity
-    await prisma.rouletteItem.deleteMany({
-      where: { rouletteId: id }
-    });
+          });
+          return routeItem;
+        })
+      });
+      
+      await rouletteRepository.save(roulette);
+    } else {
+      // Update existing: Delete all items and recreate for simplicity
+      await itemRepository.delete({ rouletteId: id });
 
-    await prisma.roulette.update({
-      where: { id, userId },
-      data: {
-        name: data.name,
-        type: data.type,
-        isDefault: data.isDefault,
-        items: {
-          create: data.items.map(item => ({
-            name: item.name,
-            fixedProbability: item.fixedProbability
-          }))
-        }
+      const roulette = await rouletteRepository.findOne({ where: { id } });
+      if (!roulette) {
+        throw new Error("Roulette not found");
       }
-    });
+
+      roulette.name = data.name;
+      roulette.type = data.type;
+      roulette.isDefault = data.isDefault;
+
+      const items = data.items.map(item => {
+        const routeItem = itemRepository.create({
+          name: item.name,
+          fixedProbability: item.fixedProbability,
+          rouletteId: id
+        });
+        return routeItem;
+      });
+
+      await rouletteRepository.save(roulette);
+      await itemRepository.save(items);
+    }
+
+    revalidatePath("/manage");
+    revalidatePath("/home");
+    return { success: true };
+  } catch (error) {
+    console.error("Save roulette error:", error);
+    throw error;
   }
-
-  revalidatePath("/manage");
-  revalidatePath("/home");
-  return { success: true };
 }
