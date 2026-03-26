@@ -5,7 +5,7 @@
 
 // Note: In Prisma 7+, connection URLs must be configured in prisma.config.ts
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../../node_modules/.prisma/client"
 }
 
