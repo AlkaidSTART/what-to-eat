@@ -29,6 +29,7 @@ interface AppStore {
   activeRouletteId: string | null;
   setActiveRouletteId: (id: string) => void;
   updateRoulette: (id: string, updated: Partial<RouletteState>) => void;
+  deleteRoulette: (id: string) => void;
 }
 
 // 默认转盘数据
@@ -99,6 +100,19 @@ export const useAppStore = create<AppStore>()(
             r.id === id ? { ...r, ...updated } : r
           ),
         })),
+      deleteRoulette: (id) =>
+        set((state) => {
+          const newRoulettes = state.roulettes.filter((r) => r.id !== id);
+          // 如果删除的是当前激活的转盘，重置激活状态
+          const newActiveId =
+            state.activeRouletteId === id
+              ? newRoulettes[0]?.id || null
+              : state.activeRouletteId;
+          return {
+            roulettes: newRoulettes,
+            activeRouletteId: newActiveId,
+          };
+        }),
     }),
     {
       name: "what-to-eat-store",

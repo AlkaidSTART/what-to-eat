@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, memo } from "react";
+import { useRef, useState, memo } from "react";
 import gsap from "gsap";
 
 export type RouletteItemType = {
@@ -17,10 +17,13 @@ interface GSAPRouletteProps {
 const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
   const wheelRef = useRef<SVGSVGElement>(null);
   const pointerRef = useRef<HTMLDivElement>(null);
+  const resultContainerRef = useRef<HTMLDivElement>(null);
   const resultTextRef = useRef<HTMLParagraphElement>(null);
   const centerDotRef = useRef<HTMLDivElement>(null);
+  const glowRef = useRef<HTMLDivElement>(null);
   const [isSpinning, setIsSpinning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // SVG parameters
   const size = 300;
@@ -31,14 +34,11 @@ const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
   // Calculate angles based on probabilities
   let currentAngle = 0;
   const sectors = items.map((item) => {
-    // Math: probability / 100 * 360
     const angle = (item.probability / 100) * 360;
     const startAngle = currentAngle;
     const endAngle = currentAngle + angle;
     currentAngle = endAngle;
 
-    // Convert angles to SVG coordinates
-    // SVG coordinate system starts from 3 o'clock (0 degrees), we shift it by -90 to start from top
     const startRad = (startAngle - 90) * (Math.PI / 180);
     const endRad = (endAngle - 90) * (Math.PI / 180);
 
@@ -49,26 +49,22 @@ const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
 
     const largeArcFlag = angle > 180 ? 1 : 0;
 
-    // SVG Path Command for a sector
     const pathData = [
       `M ${cx} ${cy}`,
       `L ${x1} ${y1}`,
       `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-      `Z`
+      `Z`,
     ].join(" ");
 
-    // Text rotation logic
     const midAngleNum = startAngle + angle / 2;
     const midAngle = midAngleNum.toFixed(4);
-    
-    // position name text slightly inside
-    const nameRadius = radius * 0.70;
+
+    const nameRadius = radius * 0.7;
     const nameRad = (midAngleNum - 90) * (Math.PI / 180);
     const ntx = (cx + nameRadius * Math.cos(nameRad)).toFixed(4);
     const nty = (cy + nameRadius * Math.sin(nameRad)).toFixed(4);
 
-    // position probability text closer to center
-    const probRadius = radius * 0.50;
+    const probRadius = radius * 0.5;
     const probRad = (midAngleNum - 90) * (Math.PI / 180);
     const ptx = (cx + probRadius * Math.cos(probRad)).toFixed(4);
     const pty = (cy + probRadius * Math.sin(probRad)).toFixed(4);
@@ -89,17 +85,24 @@ const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
     if (isSpinning) return;
     setIsSpinning(true);
     setResult(null);
+    setShowCelebration(false);
 
     // Ripple click effect
-    gsap.fromTo(centerDotRef.current, 
+    gsap.fromTo(
+      centerDotRef.current,
       { scale: 0.8, boxShadow: "0 0 0 0 rgba(0,0,0,0.4)" },
-      { scale: 1, boxShadow: "0 0 0 20px rgba(0,0,0,0)", duration: 0.6, ease: "power2.out" }
+      {
+        scale: 1,
+        boxShadow: "0 0 0 20px rgba(0,0,0,0)",
+        duration: 0.6,
+        ease: "power2.out",
+      }
     );
 
-    // 抽奖逻辑：根据概率计算落在哪个扇区
+    // 抽奖逻辑
     const random = Math.random() * 100;
     let sum = 0;
-    let winner: typeof sectors[0] | null = null;
+    let winner: (typeof sectors)[0] | null = null;
     for (const sector of sectors) {
       sum += sector.probability;
       if (random <= sum) {
@@ -108,48 +111,127 @@ const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
       }
     }
 
-    if (!winner) winner = sectors[sectors.length - 1]; // fallback
+    if (!winner) winner = sectors[sectors.length - 1];
 
-    // 目标扇区的中心角度 (我们要让这个角度对准指针，假设指针在上方也就是 270度 / -90度 位置)
-    // SVG的初始状态，顶部是 -90度，对应我们要转到的角度是 360 - midAngle
-    const baseRotation = 360 * 5; // 转5圈
-    const targetRotation = baseRotation + (360 - winner.midAngleNum); 
+    const baseRotation = 360 * 5;
+    const targetRotation = baseRotation + (360 - winner.midAngleNum);
 
     // GSAP Animation
     gsap.to(wheelRef.current, {
       rotation: targetRotation,
       transformOrigin: "50% 50%",
       duration: 5,
-      ease: "power4.out", // 类似物理阻尼的缓动
+      ease: "power4.out",
       onComplete: () => {
         setIsSpinning(false);
         setResult(winner!.name);
-        
+        setShowCelebration(true);
+
         // Pointer bounce
-        gsap.fromTo(pointerRef.current, 
+        gsap.fromTo(
+          pointerRef.current,
           { scale: 0.8 },
           { scale: 1, duration: 0.3, ease: "back.out(1.7)" }
         );
 
-        // Result staggered reveal
-        setTimeout(() => {
-          if (resultTextRef.current) {
-            const chars = resultTextRef.current.querySelectorAll('.char');
-            gsap.fromTo(chars, 
-              { opacity: 0, y: 10, scale: 0.8 },
-              { opacity: 1, y: 0, scale: 1, stagger: 0.1, duration: 0.4, ease: "back.out(2)" }
-            );
-          }
-        }, 50);
-      }
+        // 高级结果展示动画
+        showResultAnimation(winner!.name, winner!.color);
+      },
     });
+  };
+
+  const showResultAnimation = (winnerName: string, winnerColor: string) => {
+    const tl = gsap.timeline();
+
+    // 1. 容器淡入放大
+    tl.fromTo(
+      resultContainerRef.current,
+      { opacity: 0, scale: 0.8, y: 20 },
+      { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: "back.out(1.7)" }
+    );
+
+    // 2. 光晕效果
+    tl.fromTo(
+      glowRef.current,
+      { opacity: 0, scale: 0.5 },
+      {
+        opacity: 1,
+        scale: 1.5,
+        duration: 0.6,
+        ease: "power2.out",
+      },
+      "-=0.3"
+    );
+
+    // 3. 文字逐字动画
+    tl.add(() => {
+      if (resultTextRef.current) {
+        const chars = resultTextRef.current.querySelectorAll(".char");
+        gsap.fromTo(
+          chars,
+          { opacity: 0, y: 30, rotateX: -90 },
+          {
+            opacity: 1,
+            y: 0,
+            rotateX: 0,
+            stagger: 0.08,
+            duration: 0.5,
+            ease: "back.out(2)",
+          }
+        );
+      }
+    }, "-=0.2");
+
+    // 4. 光晕呼吸效果
+    tl.to(glowRef.current, {
+      opacity: 0.6,
+      scale: 1.2,
+      duration: 1.5,
+      repeat: -1,
+      yoyo: true,
+      ease: "sine.inOut",
+    });
+
+    // 5. 庆祝彩带效果（使用 CSS 动画）
+    createConfetti();
+  };
+
+  const createConfetti = () => {
+    const colors = ["#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4"];
+    const container = resultContainerRef.current;
+    if (!container) return;
+
+    for (let i = 0; i < 30; i++) {
+      const confetti = document.createElement("div");
+      confetti.className = "absolute w-2 h-2 rounded-full pointer-events-none";
+      confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      confetti.style.left = "50%";
+      confetti.style.top = "50%";
+      container.appendChild(confetti);
+
+      const angle = (Math.random() * 360 * Math.PI) / 180;
+      const distance = 100 + Math.random() * 100;
+      const x = Math.cos(angle) * distance;
+      const y = Math.sin(angle) * distance;
+
+      gsap.to(confetti, {
+        x,
+        y,
+        opacity: 0,
+        scale: 0,
+        rotation: Math.random() * 720 - 360,
+        duration: 1 + Math.random() * 0.5,
+        ease: "power2.out",
+        onComplete: () => confetti.remove(),
+      });
+    }
   };
 
   return (
     <div className="flex flex-col items-center gap-8 w-full">
       <div className="relative w-full max-w-[300px] aspect-square mx-auto">
         {/* 指针 */}
-        <div 
+        <div
           ref={pointerRef}
           className="absolute -top-4 left-1/2 -translate-x-1/2 z-10 w-8 h-8 flex items-center justify-center filter drop-shadow-md"
         >
@@ -157,17 +239,22 @@ const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
         </div>
 
         {/* 转盘 */}
-        <svg 
+        <svg
           ref={wheelRef}
-          width="100%" 
-          height="100%" 
-          viewBox={`0 0 ${size} ${size}`} 
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${size} ${size}`}
           className="rounded-full shadow-lg border-4 border-white"
         >
           <g>
             {sectors.map((sector) => (
               <g key={sector.id}>
-                <path d={sector.pathData} fill={sector.color} stroke="#ffffff" strokeWidth="2" />
+                <path
+                  d={sector.pathData}
+                  fill={sector.color}
+                  stroke="#ffffff"
+                  strokeWidth="2"
+                />
                 <text
                   x={sector.ntx}
                   y={sector.nty}
@@ -201,16 +288,24 @@ const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
             ))}
           </g>
         </svg>
-        
+
         {/* 中心圆点 */}
-        <div ref={centerDotRef} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-sm z-10 flex items-center justify-center">
+        <div
+          ref={centerDotRef}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full shadow-sm z-10 flex items-center justify-center"
+        >
           <div className="w-3 h-3 bg-gray-200 rounded-full"></div>
         </div>
       </div>
 
       <button
         onClick={(e) => {
-          gsap.to(e.currentTarget, { scale: 0.95, duration: 0.1, yoyo: true, repeat: 1 });
+          gsap.to(e.currentTarget, {
+            scale: 0.95,
+            duration: 0.1,
+            yoyo: true,
+            repeat: 1,
+          });
           spin();
         }}
         disabled={isSpinning || items.length === 0}
@@ -219,19 +314,48 @@ const GSAPRoulette = memo(function GSAPRoulette({ items }: GSAPRouletteProps) {
         {isSpinning ? "命运转动中..." : "开始抽取"}
       </button>
 
-      {/* 结果显示 */}
-      <div className="h-16 flex items-center justify-center relative">
-        {result && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            {/* 背后光晕 */}
-            <div className="absolute w-32 h-10 bg-yellow-200 opacity-20 blur-xl rounded-full"></div>
-            <p ref={resultTextRef} className="text-xl font-light tracking-widest z-10 flex items-center">
-              ✨ <span className="mx-2 font-medium flex">
-                {result.split('').map((char, i) => (
-                  <span key={i} className="char inline-block">{char}</span>
-                ))}
-              </span> ✨
-            </p>
+      {/* 结果显示区域 */}
+      <div className="h-24 flex items-center justify-center relative w-full">
+        {showCelebration && result && (
+          <div
+            ref={resultContainerRef}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            {/* 动态光晕背景 */}
+            <div
+              ref={glowRef}
+              className="absolute w-40 h-16 rounded-full blur-xl"
+              style={{
+                background: `radial-gradient(circle, rgba(255,215,0,0.4) 0%, rgba(255,215,0,0) 70%)`,
+              }}
+            ></div>
+
+            {/* 结果文字 - 高级简约设计 */}
+            <div className="relative z-10 text-center">
+              <p className="text-xs text-gray-400 tracking-[0.3em] uppercase mb-2">
+                命运之选
+              </p>
+              <p
+                ref={resultTextRef}
+                className="text-3xl font-extralight tracking-[0.15em] text-gray-900"
+                style={{ perspective: "1000px" }}
+              >
+                <span className="flex">
+                  {result.split("").map((char, i) => (
+                    <span
+                      key={i}
+                      className="char inline-block"
+                      style={{ transformStyle: "preserve-3d" }}
+                    >
+                      {char}
+                    </span>
+                  ))}
+                </span>
+              </p>
+              <div className="mt-3 flex justify-center">
+                <div className="w-12 h-[1px] bg-gradient-to-r from-transparent via-gray-400 to-transparent"></div>
+              </div>
+            </div>
           </div>
         )}
       </div>
