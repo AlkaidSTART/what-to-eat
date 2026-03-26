@@ -8,7 +8,7 @@
 - **Package Manager**: [pnpm](https://pnpm.io/)
 
 ### Data Layer
-- **Database**: [PostgreSQL](https://www.postgresql.org/)
+- **Database**: [Supabase](https://supabase.com/) (PostgreSQL)
 - **ORM**: [Prisma](https://www.prisma.io/)
 - **State Management (Client)**: [Zustand](https://github.com/pmndrs/zustand)
 - **Data Fetching (Server State)**: [TanStack Query](https://tanstack.com/query/latest)
