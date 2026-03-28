@@ -98,7 +98,7 @@ export default function ManagePage() {
                 {/* 删除按钮 */}
                 <button
                   onClick={(e) => handleDelete(roulette.id, e)}
-                  className="absolute top-5 right-14 w-8 h-8 rounded-full bg-red-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-red-100"
+                  className="absolute top-5 right-14 w-8 h-8 rounded-full bg-red-50 flex items-center justify-center transition-all hover:bg-red-100"
                   title="删除转盘"
                 >
                   <Trash2 className="w-4 h-4 text-red-500" />
